@@ -33,10 +33,19 @@ class SerialThread(QtCore.QThread):
 
 	def run(self):
 		while True:
-			time.sleep(3)
+			time.sleep(0.5)
 			self.serial_lock.lock()
 			if self.serial_port.isOpen():
-				for s_char in self.serial_port.read(300):
+				data = []
+				try:
+					data = self.serial_port.read(16000)
+				except serial.serialutil.SerialException as e:
+					print("Serial broke!")
+					self.serial_lock.unlock()
+					continue
+				
+					
+				for s_char in data:
 					res = self.parser.read_char(s_char)
 					if type(res) is ProbeScopeInterface.ProbeScopeSamples:
 						print("Plotting!")
@@ -60,6 +69,7 @@ class WidgetGallery(QMainWindow):
 
 		self.Serial_Handel = serial.Serial()
 		self.Serial_Handel.timeout = 0
+		self.Serial_Handel.baudrate = 115200
 		self.serial_lock = QtCore.QMutex()
 
 		self.serial_thread = SerialThread(self.Serial_Handel, self.serial_lock, self.update_plot)

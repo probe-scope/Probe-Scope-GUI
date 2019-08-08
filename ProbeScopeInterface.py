@@ -1,4 +1,5 @@
 import warnings
+import struct
 
 # Probe Scope
 
@@ -30,7 +31,7 @@ class ParserWarning(UserWarning):
 
 class ProbeScopeSamples(object):
 	def __init__(self, samples):
-		self.samples = samples
+		self.samples = [-256 + s if s > 127 else s for s in samples]
 
 
 class ProbeScopeParser(object):
