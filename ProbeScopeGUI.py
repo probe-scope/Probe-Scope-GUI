@@ -15,6 +15,7 @@ from PySide2.QtWidgets import QApplication, QCheckBox, QGridLayout, QGroupBox, Q
 
 import ProbeScopeInterface
 
+
 class SelfPopulatingComboBox(QComboBox):
 	popupAboutToBeShown = QtCore.Signal()
 
@@ -24,11 +25,11 @@ class SelfPopulatingComboBox(QComboBox):
 
 
 class SerialThread(QtCore.QThread):
-	def __init__(self, serial_port, serial_lock, plot_data, parent=None):
+	def __init__(self, serial_port, serial_lock, command_callback, parent=None):
 		QtCore.QThread.__init__(self, parent)
 		self.serial_port = serial_port
 		self.serial_lock = serial_lock
-		self.plot_data = plot_data
+		self.command_callback = command_callback
 		self.parser = ProbeScopeInterface.ProbeScopeParser()
 
 	def run(self):
@@ -43,15 +44,11 @@ class SerialThread(QtCore.QThread):
 					print("Serial broke!")
 					self.serial_lock.unlock()
 					continue
-				
-					
+
 				for s_char in data:
 					res = self.parser.read_char(s_char)
-					if type(res) is ProbeScopeInterface.ProbeScopeSamples:
-						print("Plotting!")
-						self.plot_data(res)
-					elif res is not None:
-						print("Got {}!".format(res))
+					if res is not None:
+						self.command_callback(res)
 			# print("Serial Obj:" + str(self.serial_port))
 			self.serial_lock.unlock()
 
@@ -117,6 +114,13 @@ class WidgetGallery(QMainWindow):
 		self.cent_widget.setLayout(mainLayout)
 
 		self.setWindowTitle("Styles")
+
+	def command_callback(self, command):
+		print("Got {}!".format(command))
+
+		if type(command) is ProbeScopeInterface.ProbeScopeSamples:
+			print("Plotting!")
+			self.plot_data(command)
 
 	def get_samples(self):
 		self.serial_lock.lock()

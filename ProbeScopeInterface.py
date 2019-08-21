@@ -1,5 +1,5 @@
-import warnings
 import struct
+import warnings
 
 # Probe Scope
 
@@ -34,6 +34,23 @@ class ProbeScopeSamples(object):
 		self.samples = [-256 + s if s > 127 else s for s in samples]
 
 
+class ProbeScopeWriteResponse(object):
+	def __init__(self, data_len):
+		self.data_len = data_len
+
+	def __len__(self):
+		return self.data_len
+
+
+class ProbeScopeReadResponse(object):
+	def __init__(self, data):
+		self.data = data
+
+
+class ProbeScopeTriggered(object):
+	pass
+
+
 class ProbeScopeParser(object):
 	def __init__(self):
 		self.packet_dict = {
@@ -46,6 +63,10 @@ class ProbeScopeParser(object):
 			TRIGGERED_COMMAND: self.parse_sample_response,  # same message as a response
 			WRITE_REGISTERS: self.parse_write_reg_response,
 			READ_REGISTERS: self.parse_read_reg_response
+		}
+
+		self.command_dict = {
+			TRIGGERED_COMMAND: self.parse_triggered
 		}
 
 		self.receiving_message = False
@@ -72,21 +93,37 @@ class ProbeScopeParser(object):
 		return ProbeScopeSamples(samples)
 
 	def parse_write_reg_response(self):
-		raise NotImplementedError("parse_write_reg_response not implmented!")
+		ret = ProbeScopeWriteResponse(struct.unpack("<I", self.char_buff[4:8]))
+		self.char_buff = list()
+		return ret
 
 	def parse_read_reg_response(self):
-		raise NotImplementedError("parse_read_reg_response not implmented!")
+		data_len = struct.unpack("<I", self.char_buff[4:8])
+		if len(self.char_buff) != data_len + 10:
+			warnings.warn("Returned less data then they said they would! {} vs the stated {}".format(data_len, len(
+				self.char_buff) - 10), ParserWarning)
+		ret = ProbeScopeReadResponse(self.char_buff[9:-1])
+		self.char_buff = list()
+		return ret
 
 	def parse_response(self):
 		try:
 			return self.command_result_dict[self.char_buff[1]]()
 		except KeyError:
-			warnings.warn("Unknown command {}".format(self.char_buff), ParserWarning)
+			warnings.warn("Unknown command response {}".format(self.char_buff), ParserWarning)
 			self.char_buff = list()
 			return None
 
 	def parse_command(self):
-		pass
+		try:
+			return self.command_dict[self.char_buff[1]]()
+		except KeyError:
+			warnings.warn("Unknown command {}".format(self.char_buff), ParserWarning)
+			self.char_buff = list()
+			return None
+
+	def parse_triggered(self):
+		return ProbeScopeTriggered()
 
 	def parse_message(self):
 		try:
@@ -117,6 +154,45 @@ class ProbeScopeParser(object):
 		return None
 
 
+def ProbeScopeRegisterWrite(data_address, data):
+	"""
+	Return formatted register write command
+
+	:param data_address: Int field address
+	:type data_address: int
+	:param data: Array of bytes or byte like things
+	:type data: bytearray
+	:return: regester write command
+	:rtype: bytearray
+	"""
+	data = bytearray(data)
+	data_len = len(data)
+
+	output = [
+		START_OF_MESSAGE,
+		COMMAND_MESSAGE,
+		WRITE_REGISTERS
+	]
+	output.extend(struct.pack("<I", data_address))
+	output.extend(struct.pack("<I", data_len))
+	output.extend(data)
+	output.append(END_OF_MESSAGE)
+
+	return output
+
+
+def ProbeScopeRegisterRead(address, len):
+	output = [
+		START_OF_MESSAGE,
+		COMMAND_RESULT,
+		READ_REGISTERS,
+	]
+	output.extend(struct.pack("<I", address))
+	output.extend(struct.pack("<I", len))
+	output.append(END_OF_MESSAGE)
+
+	return output
+
 if __name__ == '__main__':
 	test_samples_arr = [0x1E, 0x52, 0x73, 0x4C, 0x0A, 0x00, 0x00, 0x00, 0x44, 0x01, 0x02, 0x03, 0x0F, 0x05, 0x06, 0x07,
 						0x08, 0x09, 0x0A, 0x04]
@@ -125,4 +201,3 @@ if __name__ == '__main__':
 		res = parser.read_char(car)
 		if res is not None:
 			print(res.samples)
-
