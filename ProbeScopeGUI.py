@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+from enum import Enum
 
 # Force pyqtgraph to use PySide2
 os.environ["PYQTGRAPH_QT_LIB"] = "PySide2"
@@ -14,6 +15,14 @@ from PySide2.QtWidgets import QApplication, QCheckBox, QGridLayout, QGroupBox, Q
 	QVBoxLayout, QWidget, QMainWindow, QComboBox, QLabel
 
 import ProbeScopeInterface
+import measurements
+
+ADC_STEP = 0.004
+ADC_SAMPLE_RATE = 250000000
+
+
+class SerialState(Enum):
+	Waiting_For_Samples = 1
 
 
 class SelfPopulatingComboBox(QComboBox):
@@ -57,6 +66,15 @@ class WidgetGallery(QMainWindow):
 	def __init__(self, parent=None):
 		super(WidgetGallery, self).__init__(parent)
 
+		# System State
+		self.adc_scale = 1
+		self.adc_decimation = 1
+		self.offset = 0
+		self.samples = None
+
+		self.serial_state = None
+		self.serial_state_timeout = None
+
 		self.originalPalette = QApplication.palette()
 
 		QApplication.setStyle(QStyleFactory.create("Fusion"))
@@ -91,8 +109,8 @@ class WidgetGallery(QMainWindow):
 		self.main_plot.getAxis('bottom').setGrid(255)
 		self.curve.getViewBox().setMouseMode(pyqtgraph.ViewBox.RectMode)
 
-		self.createControlGroupBox()
-		self.createControlGroupBox()
+		self.ControlGroupBox = QGroupBox("Controls")
+		self.create_control_group_box()
 
 		topLayout = QHBoxLayout()
 		topLayout.addStretch(1)
@@ -100,10 +118,32 @@ class WidgetGallery(QMainWindow):
 		topLayout.addWidget(serial_label)
 		topLayout.addWidget(self.Serial_Port_Box, 2)
 
+		self.bottom_layout = QHBoxLayout()
+		self.bottom_layout.addStretch(1)
+		measurement_label = QLabel()
+		measurement_label.setText("Measurements:")
+
+		self.measurements_list = list()
+		self.measurements_functions = [
+			measurements.meas_pk_pk,
+			measurements.meas_rms,
+			None,
+			None
+		]
+
+		for i in range(4):
+			print("{}: N/A".format(i + 1))
+			meas_n = QLabel()
+			meas_n.setText("{}: N/A".format(i + 1))
+			meas_n.setAlignment(QtCore.Qt.AlignLeft)
+			self.measurements_list.append(meas_n)
+			self.bottom_layout.addWidget(meas_n, alignment=QtCore.Qt.AlignLeft)
+
 		mainLayout = QGridLayout()
 		mainLayout.addLayout(topLayout, 0, 0, 1, 2)
 		mainLayout.addWidget(self.main_plot, 1, 0, 2, 1)
 		mainLayout.addWidget(self.ControlGroupBox, 1, 1, 2, 1)
+		mainLayout.addLayout(self.bottom_layout, 3, 0, 1, 2, alignment=QtCore.Qt.AlignLeft)
 		mainLayout.setRowStretch(1, 1)
 		mainLayout.setRowStretch(2, 1)
 		mainLayout.setColumnStretch(0, 10)
@@ -123,16 +163,67 @@ class WidgetGallery(QMainWindow):
 			self.plot_data(command)
 
 	def get_samples(self):
-		self.serial_lock.lock()
-		if self.Serial_Handel.isOpen():
-			self.Serial_Handel.write(ProbeScopeInterface.REQUEST_SAMPLE_DATA_COMMAND)
-		self.serial_lock.unlock()
+		if self.serial_state is SerialState.Waiting_For_Samples:
+			if time.time() - self.serial_state_timeout < 0:
+				print("Already waiting for samples!")
+				return
+		elif self.serial_state is not None:
+			if time.time() - self.serial_state_timeout < 0:
+				print("In another state ({})!".format(self.serial_state))
+				return
+		if self.serial_lock.tryLock(50):
+			if self.Serial_Handel.isOpen():
+				self.serial_state = SerialState.Waiting_For_Samples
+				self.serial_state_timeout = time.time() + 2
+				self.Serial_Handel.write(ProbeScopeInterface.REQUEST_SAMPLE_DATA_COMMAND)
+			else:
+				print("Serial handel closed, cannot get samples")
+			self.serial_lock.unlock()
+		else:
+			print("Failed to get serial lock! Cannot request samples!")
+
+	def auto_sample(self):
+		TIMEOUT = 500
+		if not self.autoPushButton.isChecked():
+			return
+
+		if self.serial_state_timeout is not None and time.time() - self.serial_state_timeout > 0:
+			self.serial_state = None
+
+		if self.serial_state is not None:
+			self.auto_sample_timer.start(TIMEOUT)
+
+		if self.serial_lock.tryLock(50):
+			if self.Serial_Handel.isOpen():
+				self.serial_state = SerialState.Waiting_For_Samples
+				self.serial_state_timeout = time.time() + 2
+				self.Serial_Handel.write(ProbeScopeInterface.REQUEST_SAMPLE_DATA_COMMAND)
+			else:
+				print("Serial handel closed, cannot get samples")
+			self.serial_lock.unlock()
+		else:
+			print("Failed to get serial lock! Cannot request samples!")
+
+		self.auto_sample_timer.start(TIMEOUT)
+
+	def update_measurements(self):
+		if self.samples is None:
+			return
+		for i, meas in enumerate(self.measurements_functions):
+			if meas is None:
+				self.measurements_list[i].setText("{}: N/A".format(i + 1))
+			else:
+				self.measurements_list[i].setText("{}: {}".format(i + 1, meas(self.samples)))
 
 	def update_plot(self, samples):
-		x = np.linspace(-5, 5, len(samples.samples))
-		y = samples.samples
-
+		if self.serial_state is SerialState.Waiting_For_Samples:
+			self.serial_state = None
+		total_len = len(samples.samples) * (1 / (ADC_SAMPLE_RATE / self.adc_decimation))
+		x = np.linspace(-(total_len / 2), total_len / 2, len(samples.samples))
+		y = np.asarray(samples.samples) * ADC_STEP * self.adc_scale
+		self.samples = (x, y)
 		self.curve.setData(x, y)
+		self.update_measurements()
 
 	def autorange_plot(self):
 		self.main_plot.autoRange()
@@ -167,12 +258,19 @@ class WidgetGallery(QMainWindow):
 			print("Failed to get serial port mutex!")
 			self.Serial_Port_Box.setCurrentIndex(0)
 
-	def createControlGroupBox(self):
-		self.ControlGroupBox = QGroupBox("Controls")
-
-		updatePushButton = QPushButton("Update")
+	def create_control_group_box(self):
+		updatePushButton = QPushButton("Single")
 		updatePushButton.setDefault(True)
 		updatePushButton.clicked.connect(self.get_samples)
+
+		self.autoPushButton = QPushButton("Auto")
+		self.autoPushButton.setDefault(True)
+		self.autoPushButton.setCheckable(True)
+		self.autoPushButton.clicked.connect(self.auto_sample)
+
+		self.auto_sample_timer = QtCore.QTimer()
+		self.auto_sample_timer.timeout.connect(self.auto_sample)
+		self.auto_sample_timer.setSingleShot(True)
 
 		autoRange = QPushButton("Auto Range")
 		autoRange.setDefault(True)
@@ -180,6 +278,7 @@ class WidgetGallery(QMainWindow):
 
 		layout = QVBoxLayout()
 		layout.addWidget(updatePushButton)
+		layout.addWidget(self.autoPushButton)
 		layout.addWidget(autoRange)
 		layout.addStretch(1)
 		self.ControlGroupBox.setLayout(layout)
