@@ -6,6 +6,7 @@ import warnings
 # Global message symbols
 START_OF_MESSAGE = 0x1E
 END_OF_MESSAGE = 0x04
+END_OF_BLOCK = 0x17
 ESCAPE_CHAR = 0x1A
 
 # Command and response
@@ -20,6 +21,10 @@ READ_REGISTERS = 0x72
 
 SAMPLE_DATA_LENGTH = 0x4C
 SAMPLE_DATA_FIELD_INDICATOR = 0x44
+
+LENGTH_FIELD_INDICATOR = 0x4C
+DATA_FIELD_INDICATOR = 0x44
+ADDRESS_FIELD_INDICATOR = 0x41
 
 # Commands to send
 REQUEST_SAMPLE_DATA_COMMAND = [START_OF_MESSAGE, COMMAND_MESSAGE, REQUEST_SAMPLE_DATA, END_OF_MESSAGE]
@@ -167,14 +172,18 @@ def ProbeScopeRegisterWrite(data_address, data):
 	"""
 	data = bytearray(data)
 	data_len = len(data)
-
-	output = [
+	
+	output = bytearray()
+	output.extend([
 		START_OF_MESSAGE,
 		COMMAND_MESSAGE,
 		WRITE_REGISTERS
-	]
-	output.extend(struct.pack("<I", data_address))
-	output.extend(struct.pack("<I", data_len))
+	])
+	output.append(ADDRESS_FIELD_INDICATOR)
+	output.extend(ProbeScopeEscapeBytes(struct.pack("<I", data_address)))
+	output.append(LENGTH_FIELD_INDICATOR)
+	output.extend(ProbeScopeEscapeBytes(struct.pack("<I", data_len)))
+	output.append(DATA_FIELD_INDICATOR)
 	output.extend(data)
 	output.append(END_OF_MESSAGE)
 
@@ -182,16 +191,28 @@ def ProbeScopeRegisterWrite(data_address, data):
 
 
 def ProbeScopeRegisterRead(address, len):
-	output = [
+	output = bytearray()
+	output.extend([
 		START_OF_MESSAGE,
-		COMMAND_RESULT,
+		COMMAND_MESSAGE,
 		READ_REGISTERS,
-	]
-	output.extend(struct.pack("<I", address))
-	output.extend(struct.pack("<I", len))
+	])
+	output.append(ADDRESS_FIELD_INDICATOR)
+	output.extend(ProbeScopeEscapeBytes(struct.pack("<I", address)))
+	output.append(LENGTH_FIELD_INDICATOR)
+	output.extend(ProbeScopeEscapeBytes(struct.pack("<I", len)))
 	output.append(END_OF_MESSAGE)
 
 	return output
+
+def ProbeScopeEscapeBytes(data):
+	out = bytearray()
+	for d in data:
+		if d in [ESCAPE_CHAR, START_OF_MESSAGE, END_OF_MESSAGE, END_OF_BLOCK]:
+			out.extend(bytes([ESCAPE_CHAR, d]))
+		else:
+			out.extend(bytes([d]))
+	return out
 
 if __name__ == '__main__':
 	test_samples_arr = [0x1E, 0x52, 0x73, 0x4C, 0x0A, 0x00, 0x00, 0x00, 0x44, 0x01, 0x02, 0x03, 0x0F, 0x05, 0x06, 0x07,
