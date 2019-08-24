@@ -1,28 +1,40 @@
+import numpy as np
 import serial
-import ProbeScopeInterface
-import random
+from ProbeScopeInterface import *
 
-def rand_nums():
-	nums = list()
-	while len(nums) < 10:
-		i = random.randrange(255)
-		if i not in [ProbeScopeInterface.START_OF_MESSAGE, ProbeScopeInterface.END_OF_MESSAGE, ProbeScopeInterface.ESCAPE_CHAR]:
-			nums.append(i)
-	return nums
+
+def ProbeScopeMakeSamples(samples):
+	output = bytearray()
+	output.extend([
+		START_OF_MESSAGE,
+		COMMAND_RESULT,
+		REQUEST_SAMPLE_DATA,
+	])
+	output.append(LENGTH_FIELD_INDICATOR)
+	output.extend(ProbeScopeEscapeBytes(struct.pack("<I", len(samples))))
+	output.append(DATA_FIELD_INDICATOR)
+	output.extend(ProbeScopeEscapeBytes(samples))
+	output.append(END_OF_MESSAGE)
+
+	return output
+
 
 if __name__ == '__main__':
-	test_samples_arr = [0x1E, 0x52, 0x73, 0x4C, 0x0A, 0x00, 0x00, 0x00, 0x44, 0x01, 0x02, 0x03, 0x0F, 0x05, 0x06, 0x07,
-						0x08, 0x09, 0x0A, 0x04]
 	port = serial.Serial("COM3")
 	port.timeout = 0
-
-	print(test_samples_arr[-11:-1])
 
 	while True:
 		mess = port.read(4)
 		if len(mess) > 0:
 			mess = [int(i) for i in mess]
 			print(mess)
-		if mess == ProbeScopeInterface.REQUEST_SAMPLE_DATA_COMMAND:
-			test_samples_arr[-11:-1] = rand_nums()
-			port.write(test_samples_arr)
+		if mess == REQUEST_SAMPLE_DATA_COMMAND:
+			points = 1000
+			type_info = np.iinfo(np.int8)
+
+			arr = np.linspace(-np.pi, np.pi, points)
+			y = np.sin(arr)*123
+			y += np.random.normal(0, 4, points)
+			y = np.clip(y, type_info.min, type_info.max)
+			y = y.astype(np.int8).tobytes()
+			port.write(ProbeScopeMakeSamples(y))

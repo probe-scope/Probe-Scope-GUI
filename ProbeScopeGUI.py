@@ -10,9 +10,9 @@ import numpy as np
 import pyqtgraph
 import serial
 import serial.tools.list_ports
-from PySide2 import QtCore
+from PySide2 import QtCore, QtGui
 from PySide2.QtWidgets import QApplication, QCheckBox, QGridLayout, QGroupBox, QHBoxLayout, QPushButton, QStyleFactory, \
-	QVBoxLayout, QWidget, QMainWindow, QComboBox, QLabel
+	QVBoxLayout, QWidget, QMainWindow, QComboBox, QLabel, QLayout
 
 import ProbeScopeInterface
 import measurements
@@ -98,8 +98,6 @@ class WidgetGallery(QMainWindow):
 		self.Serial_Port_Box.popupAboutToBeShown.connect(self.update_ports)
 		self.Serial_Port_Box.currentIndexChanged.connect(self.selected_port)
 
-		disableWidgetsCheckBox = QCheckBox("&Disable widgets")
-
 		# create plot
 		self.main_plot = pyqtgraph.PlotWidget()
 
@@ -114,14 +112,15 @@ class WidgetGallery(QMainWindow):
 
 		topLayout = QHBoxLayout()
 		topLayout.addStretch(1)
-		topLayout.addWidget(disableWidgetsCheckBox, 1)
 		topLayout.addWidget(serial_label)
 		topLayout.addWidget(self.Serial_Port_Box, 2)
 
+		self.label_font = QtGui.QFont("Times", 600, QtGui.QFont.Bold)
 		self.bottom_layout = QHBoxLayout()
 		self.bottom_layout.addStretch(1)
 		measurement_label = QLabel()
 		measurement_label.setText("Measurements:")
+		measurement_label.setFont(self.label_font)
 
 		self.measurements_list = list()
 		self.measurements_functions = [
@@ -144,6 +143,7 @@ class WidgetGallery(QMainWindow):
 		mainLayout.addWidget(self.main_plot, 1, 0, 2, 1)
 		mainLayout.addWidget(self.ControlGroupBox, 1, 1, 2, 1)
 		mainLayout.addLayout(self.bottom_layout, 3, 0, 1, 2, alignment=QtCore.Qt.AlignLeft)
+		mainLayout.setRowMinimumHeight(3, 20)
 		mainLayout.setRowStretch(1, 1)
 		mainLayout.setRowStretch(2, 1)
 		mainLayout.setColumnStretch(0, 10)
@@ -153,7 +153,7 @@ class WidgetGallery(QMainWindow):
 		self.setCentralWidget(self.cent_widget)
 		self.cent_widget.setLayout(mainLayout)
 
-		self.setWindowTitle("Styles")
+		self.setWindowTitle("Probe-Scope Acquisition")
 
 	def command_callback(self, command):
 		print("Got {}!".format(command))
