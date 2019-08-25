@@ -173,7 +173,7 @@ def ProbeScopeRegisterWrite(data_address, data):
 	"""
 	data = bytearray(data)
 	data_len = len(data)
-	
+
 	output = bytearray()
 	output.extend([
 		START_OF_MESSAGE,
@@ -205,6 +205,7 @@ def ProbeScopeRegisterRead(address, len):
 	output.append(END_OF_MESSAGE)
 
 	return output
+
 
 def ProbeScopeEscapeBytes(data):
 	out = bytearray()
