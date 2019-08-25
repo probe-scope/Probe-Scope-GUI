@@ -185,7 +185,7 @@ def ProbeScopeRegisterWrite(data_address, data):
 	output.append(LENGTH_FIELD_INDICATOR)
 	output.extend(ProbeScopeEscapeBytes(struct.pack("<I", data_len)))
 	output.append(DATA_FIELD_INDICATOR)
-	output.extend(data)
+	output.extend(ProbeScopeEscapeBytes(data))
 	output.append(END_OF_MESSAGE)
 
 	return output
@@ -216,14 +216,17 @@ def ProbeScopeEscapeBytes(data):
 			out.extend(bytes([d]))
 	return out
 
+
 def ProbeScopeInitDAC():
 	return ProbeScopeRegisterWrite(0x4000, b'\xAA')
+
 
 def ProbeScopeSetDAC(a, b, c, d):
 	return ProbeScopeRegisterWrite(0x4002, struct.pack("<HHHH", a, b, c, d))
 
+
 def ProbeScopeSetVGA():
-	return ProbeScopeRegisterWrite(0x3000, bytearray([0, 1]))
+	return ProbeScopeRegisterWrite(0x3000, bytearray([255, 255]))
 
 if __name__ == '__main__':
 	test_samples_arr = [0x1E, 0x52, 0x73, 0x4C, 0x0A, 0x00, 0x00, 0x00, 0x44, 0x01, 0x02, 0x03, 0x0F, 0x05, 0x06, 0x07,

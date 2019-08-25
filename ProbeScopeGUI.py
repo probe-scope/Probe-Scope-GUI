@@ -254,7 +254,7 @@ class WidgetGallery(QMainWindow):
 
 		print("Finished waiting")
 
-		#self.Serial_Handel.write(ProbeScopeInterface.ProbeScopeInitDAC())
+		self.Serial_Handel.write(ProbeScopeInterface.ProbeScopeInitDAC())
 		print("WroteDAC")
 
 	def selected_port(self):
