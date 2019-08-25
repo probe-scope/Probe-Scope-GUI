@@ -12,7 +12,7 @@ import serial
 import serial.tools.list_ports
 from PySide2 import QtCore, QtGui
 from PySide2.QtWidgets import QApplication, QCheckBox, QGridLayout, QGroupBox, QHBoxLayout, QPushButton, QStyleFactory, \
-	QVBoxLayout, QWidget, QMainWindow, QComboBox, QLabel, QLayout
+	QVBoxLayout, QWidget, QMainWindow, QComboBox, QLabel, QLayout, QLineEdit
 
 import ProbeScopeInterface
 import measurements
@@ -23,6 +23,7 @@ ADC_SAMPLE_RATE = 250000000
 
 class SerialState(Enum):
 	Waiting_For_Samples = 1
+	Waiting_For_Reg_Response = 2
 
 
 class SelfPopulatingComboBox(QComboBox):
@@ -73,7 +74,7 @@ class WidgetGallery(QMainWindow):
 		self.samples = None
 
 		self.serial_state = None
-		self.serial_state_timeout = None
+		self.serial_state_timeout = time.time()
 
 		self.originalPalette = QApplication.palette()
 
@@ -162,6 +163,10 @@ class WidgetGallery(QMainWindow):
 			print("Plotting!")
 			self.update_plot(command)
 
+		elif type(command) is ProbeScopeInterface.ProbeScopeReadResponse:
+			if self.serial_state is SerialState.Waiting_For_Reg_Response:
+				self.serial_state = None
+
 	def get_samples(self):
 		if self.serial_state is SerialState.Waiting_For_Samples:
 			if time.time() - self.serial_state_timeout < 0:
@@ -240,6 +245,18 @@ class WidgetGallery(QMainWindow):
 		self.Serial_Port_Box.clear()
 		self.Serial_Port_Box.addItems(list(self.port_list.keys()))
 
+	def init_device(self):
+		self.serial_state = SerialState.Waiting_For_Reg_Response
+
+		self.Serial_Handel.write(ProbeScopeInterface.ProbeScopeSetVGA())
+		print("WroteVGA")
+		time.sleep(0.1)
+
+		print("Finished waiting")
+
+		#self.Serial_Handel.write(ProbeScopeInterface.ProbeScopeInitDAC())
+		print("WroteDAC")
+
 	def selected_port(self):
 		selected_port = self.Serial_Port_Box.currentText()
 		print("Selected:" + selected_port)
@@ -252,12 +269,31 @@ class WidgetGallery(QMainWindow):
 			else:
 				self.Serial_Handel.port = self.port_list[selected_port]
 				self.Serial_Handel.open()
-				self.Serial_Handel.write(ProbeScopeInterface.ProbeScopeInitDAC())
+				self.init_device()
 				print("Set Handel to {}".format(self.Serial_Handel))
 			self.serial_lock.unlock()
 		else:
 			print("Failed to get serial port mutex!")
 			self.Serial_Port_Box.setCurrentIndex(0)
+
+	def set_regs(self):
+		if not all([self.VGN1_box.hasAcceptableInput(), self.VGN2_box.hasAcceptableInput(), self.VGN3_box.hasAcceptableInput(), self.Offset_box.hasAcceptableInput()]):
+			print("Invalid input! {}".format([self.VGN1_box.hasAcceptableInput(), self.VGN2_box.hasAcceptableInput(), self.VGN3_box.hasAcceptableInput(), self.Offset_box.hasAcceptableInput()]))
+		#if self.serial_state is not None:
+		#	print("Can't set values! {}".format(self.serial_state))
+		#	return
+		if self.serial_lock.tryLock(50):
+			if self.Serial_Handel.isOpen():
+				self.serial_state = SerialState.Waiting_For_Reg_Response
+				self.serial_state_timeout = time.time() + 2
+				print(ProbeScopeInterface.ProbeScopeSetDAC(int(self.VGN1_box.text()), int(self.VGN2_box.text()), int(self.VGN3_box.text()), int(self.Offset_box.text())))
+				self.Serial_Handel.write(ProbeScopeInterface.ProbeScopeSetDAC(int(self.VGN1_box.text()), int(self.VGN2_box.text()), int(self.VGN3_box.text()), int(self.Offset_box.text())))
+			else:
+				print("Serial handel closed, cannot set regs")
+			self.serial_lock.unlock()
+		else:
+			print("Failed to get serial lock! Cannot request samples!")
+
 
 	def create_control_group_box(self):
 		updatePushButton = QPushButton("Single")
@@ -277,10 +313,48 @@ class WidgetGallery(QMainWindow):
 		autoRange.setDefault(True)
 		autoRange.clicked.connect(self.autorange_plot)
 
+		VGN1_label = QLabel()
+		VGN1_label.setText("VGN1")
+
+		self.VGN1_box = QLineEdit()
+		self.VGN1_box.setValidator(QtGui.QIntValidator(0, 2**12))
+
+		VGN2_label = QLabel()
+		VGN2_label.setText("VGN2")
+
+		self.VGN2_box = QLineEdit()
+		self.VGN2_box.setValidator(QtGui.QIntValidator(0, 2 ** 12))
+
+		VGN3_label = QLabel()
+		VGN3_label.setText("VGN3")
+
+		self.VGN3_box = QLineEdit()
+		self.VGN3_box.setValidator(QtGui.QIntValidator(0, 2 ** 12))
+
+		Offset_label = QLabel()
+		Offset_label.setText("Offset")
+
+		self.Offset_box = QLineEdit()
+		self.Offset_box.setValidator(QtGui.QIntValidator(0, 2 ** 12))
+
+		flush_reg = QPushButton("Flush Settings")
+		flush_reg.setDefault(True)
+		flush_reg.clicked.connect(self.set_regs)
+
+
 		layout = QVBoxLayout()
 		layout.addWidget(updatePushButton)
 		layout.addWidget(self.autoPushButton)
 		layout.addWidget(autoRange)
+		layout.addWidget(VGN1_label)
+		layout.addWidget(self.VGN1_box)
+		layout.addWidget(VGN2_label)
+		layout.addWidget(self.VGN2_box)
+		layout.addWidget(VGN3_label)
+		layout.addWidget(self.VGN3_box)
+		layout.addWidget(Offset_label)
+		layout.addWidget(self.Offset_box)
+		layout.addWidget(flush_reg)
 		layout.addStretch(1)
 		self.ControlGroupBox.setLayout(layout)
 
