@@ -98,7 +98,8 @@ class ProbeScopeParser(object):
 		return ProbeScopeSamples(samples)
 
 	def parse_write_reg_response(self):
-		ret = ProbeScopeWriteResponse(struct.unpack("<I", self.char_buff[4:8]))
+		print(bytes(self.char_buff[3:7]))
+		ret = ProbeScopeWriteResponse(struct.unpack("<I", bytes(self.char_buff[3:7])))
 		self.char_buff = list()
 		return ret
 
@@ -213,6 +214,12 @@ def ProbeScopeEscapeBytes(data):
 		else:
 			out.extend(bytes([d]))
 	return out
+
+def ProbeScopeInitDAC():
+	return ProbeScopeRegisterWrite(0x4000, b'\xAA')
+
+def ProbeScopeSetDAC(a, b, c, d):
+	return ProbeScopeRegisterWrite(0x4002, struct.pack("<HHHH", a, b, c, d))
 
 if __name__ == '__main__':
 	test_samples_arr = [0x1E, 0x52, 0x73, 0x4C, 0x0A, 0x00, 0x00, 0x00, 0x44, 0x01, 0x02, 0x03, 0x0F, 0x05, 0x06, 0x07,

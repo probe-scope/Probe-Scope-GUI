@@ -87,7 +87,7 @@ class WidgetGallery(QMainWindow):
 		self.Serial_Handel.baudrate = 115200
 		self.serial_lock = QtCore.QMutex()
 
-		self.serial_thread = SerialThread(self.Serial_Handel, self.serial_lock, self.update_plot)
+		self.serial_thread = SerialThread(self.Serial_Handel, self.serial_lock, self.command_callback)
 		self.serial_thread.start()
 
 		self.Serial_Port_Box = SelfPopulatingComboBox()
@@ -160,7 +160,7 @@ class WidgetGallery(QMainWindow):
 
 		if type(command) is ProbeScopeInterface.ProbeScopeSamples:
 			print("Plotting!")
-			self.plot_data(command)
+			self.update_plot(command)
 
 	def get_samples(self):
 		if self.serial_state is SerialState.Waiting_For_Samples:
@@ -252,6 +252,7 @@ class WidgetGallery(QMainWindow):
 			else:
 				self.Serial_Handel.port = self.port_list[selected_port]
 				self.Serial_Handel.open()
+				self.Serial_Handel.write(ProbeScopeInterface.ProbeScopeInitDAC())
 				print("Set Handel to {}".format(self.Serial_Handel))
 			self.serial_lock.unlock()
 		else:
