@@ -14,3 +14,9 @@ def meas_rms(samples):
 	ret = "{:.2f}V RMS".format(np.sqrt(np.mean(y**2)))
 	print(ret)
 	return ret
+
+def meas_average(samples):
+	x = samples[0]
+	y = samples[1]
+	ret = "{:.2f}V Avg".format(np.mean(y))
+	return ret

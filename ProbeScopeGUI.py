@@ -127,7 +127,7 @@ class WidgetGallery(QMainWindow):
 		self.measurements_functions = [
 			measurements.meas_pk_pk,
 			measurements.meas_rms,
-			None,
+			measurements.meas_average,
 			None
 		]
 
@@ -163,7 +163,7 @@ class WidgetGallery(QMainWindow):
 			print("Plotting!")
 			self.update_plot(command)
 
-		elif type(command) is ProbeScopeInterface.ProbeScopeReadResponse:
+		elif type(command) is ProbeScopeInterface.ProbeScopeWriteResponse:
 			if self.serial_state is SerialState.Waiting_For_Reg_Response:
 				self.serial_state = None
 
@@ -240,7 +240,10 @@ class WidgetGallery(QMainWindow):
 		self.port_list[" - "] = None
 
 		for port in serial.tools.list_ports.comports():
-			self.port_list["{} ({})".format(port.manufacturer, port.device)] = port.device
+			if "Microsoft" in port.manufacturer:
+				self.port_list["Probe-Scope ({})".format(port.device)] = port.device
+			else:
+				self.port_list["{} ({})".format(port.manufacturer, port.device)] = port.device
 
 		self.Serial_Port_Box.clear()
 		self.Serial_Port_Box.addItems(list(self.port_list.keys()))
@@ -277,7 +280,7 @@ class WidgetGallery(QMainWindow):
 			self.Serial_Port_Box.setCurrentIndex(0)
 
 	def set_regs(self):
-		if not all([self.VGN1_box.hasAcceptableInput(), self.VGN2_box.hasAcceptableInput(), self.VGN3_box.hasAcceptableInput(), self.Offset_box.hasAcceptableInput()]):
+		if not all([self.VGN1_box.hasAcceptableInput(), self.Offset_box.hasAcceptableInput()]):
 			print("Invalid input! {}".format([self.VGN1_box.hasAcceptableInput(), self.VGN2_box.hasAcceptableInput(), self.VGN3_box.hasAcceptableInput(), self.Offset_box.hasAcceptableInput()]))
 		#if self.serial_state is not None:
 		#	print("Can't set values! {}".format(self.serial_state))
@@ -286,8 +289,8 @@ class WidgetGallery(QMainWindow):
 			if self.Serial_Handel.isOpen():
 				self.serial_state = SerialState.Waiting_For_Reg_Response
 				self.serial_state_timeout = time.time() + 2
-				print(ProbeScopeInterface.ProbeScopeSetDAC(int(self.VGN1_box.text()), int(self.VGN2_box.text()), int(self.VGN3_box.text()), int(self.Offset_box.text())))
-				self.Serial_Handel.write(ProbeScopeInterface.ProbeScopeSetDAC(int(self.VGN1_box.text()), int(self.VGN2_box.text()), int(self.VGN3_box.text()), int(self.Offset_box.text())))
+				print(ProbeScopeInterface.ProbeScopeSetDAC(int(self.VGN1_box.text()), int(self.VGN1_box.text()), int(self.VGN1_box.text()), int(self.Offset_box.text())))
+				self.Serial_Handel.write(ProbeScopeInterface.ProbeScopeSetDAC(int(self.VGN1_box.text()), int(self.VGN1_box.text()), int(self.VGN1_box.text()), int(self.Offset_box.text())))
 			else:
 				print("Serial handel closed, cannot set regs")
 			self.serial_lock.unlock()
@@ -314,22 +317,10 @@ class WidgetGallery(QMainWindow):
 		autoRange.clicked.connect(self.autorange_plot)
 
 		VGN1_label = QLabel()
-		VGN1_label.setText("VGN1")
+		VGN1_label.setText("VGN1-3")
 
 		self.VGN1_box = QLineEdit()
 		self.VGN1_box.setValidator(QtGui.QIntValidator(0, 2**12))
-
-		VGN2_label = QLabel()
-		VGN2_label.setText("VGN2")
-
-		self.VGN2_box = QLineEdit()
-		self.VGN2_box.setValidator(QtGui.QIntValidator(0, 2 ** 12))
-
-		VGN3_label = QLabel()
-		VGN3_label.setText("VGN3")
-
-		self.VGN3_box = QLineEdit()
-		self.VGN3_box.setValidator(QtGui.QIntValidator(0, 2 ** 12))
 
 		Offset_label = QLabel()
 		Offset_label.setText("Offset")
@@ -348,10 +339,6 @@ class WidgetGallery(QMainWindow):
 		layout.addWidget(autoRange)
 		layout.addWidget(VGN1_label)
 		layout.addWidget(self.VGN1_box)
-		layout.addWidget(VGN2_label)
-		layout.addWidget(self.VGN2_box)
-		layout.addWidget(VGN3_label)
-		layout.addWidget(self.VGN3_box)
 		layout.addWidget(Offset_label)
 		layout.addWidget(self.Offset_box)
 		layout.addWidget(flush_reg)
